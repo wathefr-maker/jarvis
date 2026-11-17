@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>J.A.R.V.I.S.</title>
+<style>
+  :root { --c: #3fd8ff; --c2: #0b7fa8; --bg: #02070b; --warn: #ffb347; --txt: #cdeffc; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; background: radial-gradient(ellipse at center, #06202c 0%, var(--bg) 70%); color: var(--txt);
+    font-family: "Segoe UI", "Helvetica Neue", Arial, sans-serif; overflow: hidden; }
+  body::before { content: ""; position: fixed; inset: 0; pointer-events: none;
+    background: repeating-linear-gradient(0deg, rgba(63,216,255,.035) 0 1px, transparent 1px 3px); }
+  .grid { position: fixed; inset: 0; pointer-events: none; opacity: .12;
+    background-image: linear-gradient(var(--c2) 1px, transparent 1px), linear-gradient(90deg, var(--c2) 1px, transparent 1px);
+    background-size: 60px 60px; mask-image: radial-gradient(circle at center, black 10%, transparent 70%); }
+  header { position: fixed; top: 22px; left: 30px; right: 30px; display: flex; justify-content: space-between;
+    letter-spacing: .35em; font-size: 12px; color: var(--c); text-transform: uppercase; }
+  header .title { font-size: 15px; font-weight: 600; }
+  #clock { font-variant-numeric: tabular-nums; }
+
+  .core-wrap { position: absolute; left: 50%; top: 44%; transform: translate(-50%, -50%); width: 420px; height: 420px; }
+  .ring { position: absolute; border-radius: 50%; inset: 0; border: 2px solid transparent; }
+  .r1 { border-top-color: var(--c); border-bottom-color: var(--c); animation: spin 9s linear infinite; opacity: .8; }
+  .r2 { inset: 30px; border: 1px dashed var(--c2); animation: spin 22s linear infinite reverse; }
+  .r3 { inset: 58px; border-left-color: var(--c); border-right-color: var(--c); border-width: 6px; opacity: .55; animation: spin 5s linear infinite; }
+  .r4 { inset: 95px; border: 1px solid rgba(63,216,255,.4); }
+  .r5 { inset: 120px; border: 3px dotted var(--c); opacity: .5; animation: spin 14s linear infinite reverse; }
+  .core { position: absolute; inset: 150px; border-radius: 50%;
+    background: radial-gradient(circle, #fff 0%, var(--c) 30%, rgba(63,216,255,.15) 65%, transparent 72%);
+    box-shadow: 0 0 40px var(--c), 0 0 90px rgba(63,216,255,.35); transition: transform .12s, box-shadow .3s; }
+  .ticks { position: absolute; inset: -14px; border-radius: 50%;
+    background: repeating-conic-gradient(var(--c) 0 .6deg, transparent .6deg 6deg);
+    mask: radial-gradient(circle, transparent 66%, black 66.5%, black 69%, transparent 69.5%); opacity: .5; animation: spin 60s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  body.idle .core { opacity: .55; box-shadow: 0 0 25px var(--c); }
+  body.listening .core { animation: breathe 1.6s ease-in-out infinite; }
+  body.thinking { --c: var(--warn); }
+  body.thinking .r1 { animation-duration: 1.2s; }
+  body.thinking .r3 { animation-duration: .8s; }
+  body.speaking .core { animation: talk .25s ease-in-out infinite alternate; }
+  @keyframes breathe { 50% { transform: scale(1.12); box-shadow: 0 0 70px var(--c), 0 0 140px rgba(63,216,255,.45); } }
+  @keyframes talk { from { transform: scale(.92); } to { transform: scale(1.18); } }
+
+  #state { position: absolute; left: 50%; top: calc(44% + 240px); transform: translateX(-50%);
+    letter-spacing: .5em; font-size: 13px; color: var(--c); text-transform: uppercase; white-space: nowrap; }
+  #detail { position: absolute; left: 50%; top: calc(44% + 265px); transform: translateX(-50%); font-size: 12px; opacity: .7; white-space: nowrap; }
+
+  .panel { position: fixed; border: 1px solid rgba(63,216,255,.35); background: rgba(3,20,28,.55);
+    backdrop-filter: blur(4px); padding: 14px 16px; clip-path: polygon(0 0, calc(100% - 14px) 0, 100% 14px, 100% 100%, 14px 100%, 0 calc(100% - 14px)); }
+  .panel h3 { font-size: 10px; letter-spacing: .35em; color: var(--c); margin-bottom: 10px; font-weight: 600; }
+  #stats { left: 30px; top: 80px; width: 230px; }
+  .bar { margin: 8px 0; font-size: 11px; letter-spacing: .1em; }
+  .bar .track { height: 5px; background: rgba(63,216,255,.12); margin-top: 4px; }
+  .bar .fill { height: 100%; background: var(--c); width: 0; transition: width .8s; box-shadow: 0 0 8px var(--c); }
+  #log { right: 30px; top: 80px; bottom: 110px; width: min(430px, 36vw); overflow-y: auto; scrollbar-width: thin; }
+  .msg { margin-bottom: 12px; font-size: 14px; line-height: 1.45; animation: fade .4s; }
+  .msg .who { font-size: 10px; letter-spacing: .3em; opacity: .65; display: block; margin-bottom: 2px; }
+  .msg.user .who { color: #9fb8c4; }
+  .msg.jarvis .who { color: var(--c); }
+  .msg.tool { font-size: 11px; opacity: .6; font-family: Consolas, monospace; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+  form { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(620px, 80vw); display: flex; }
+  input { flex: 1; background: rgba(3,20,28,.8); border: 1px solid rgba(63,216,255,.45); color: var(--txt);
+    padding: 13px 16px; font-size: 15px; outline: none; letter-spacing: .03em; }
+  input:focus { border-color: var(--c); box-shadow: 0 0 14px rgba(63,216,255,.3); }
+  button { background: transparent; border: 1px solid var(--c); border-left: none; color: var(--c); padding: 0 20px;
+    letter-spacing: .3em; cursor: pointer; font-size: 11px; }
+  button:hover { background: rgba(63,216,255,.12); }
+  #offline { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); color: var(--warn); font-size: 12px; letter-spacing: .2em; display: none; }
+  @media (max-width: 900px) { #stats { display: none; } #log { width: 90vw; right: 5vw; top: auto; height: 22vh; bottom: 100px; }
+    .core-wrap { transform: translate(-50%, -60%) scale(.7); } }
+</style>
+</head>
+<body class="idle">
+<div class="grid"></div>
+<header><span class="title">J.A.R.V.I.S.</span><span id="model">—</span><span id="clock">--:--:--</span></header>
+<div id="offline">CONNEXION AU NOYAU PERDUE · RECONNEXION…</div>
+
+<div class="core-wrap">
+  <div class="ticks"></div>
+  <div class="ring r1"></div><div class="ring r2"></div><div class="ring r3"></div>
+  <div class="ring r4"></div><div class="ring r5"></div>
+  <div class="core"></div>
+</div>
+<div id="state">En veille</div>
+<div id="detail"></div>
+
+<div class="panel" id="stats">
+  <h3>DIAGNOSTIC SYSTÈME</h3>
+  <div class="bar">PROCESSEUR <span id="cpuv">--</span><div class="track"><div class="fill" id="cpu"></div></div></div>
+  <div class="bar">MÉMOIRE <span id="ramv">--</span><div class="track"><div class="fill" id="ram"></div></div></div>
+  <div class="bar" id="batrow" style="display:none">BATTERIE <span id="batv">--</span><div class="track"><div class="fill" id="bat"></div></div></div>
+</div>
+
+<div class="panel" id="log"><h3>JOURNAL</h3></div>
+
+<form id="f" autocomplete="off">
+  <input id="cmd" placeholder="Parlez, ou tapez une commande…" autofocus>
+  <button>ENVOYER</button>
+</form>
+
+<script>
+const LABELS = { idle: "En veille · dites « Jarvis »", listening: "À l'écoute", thinking: "Analyse en cours", speaking: "Transmission" };
+let user = "VOUS";
+const log = document.getElementById("log");
+
+function add(kind, text) {
+  const d = document.createElement("div");
+  d.className = "msg " + kind;
+  if (kind === "tool") d.textContent = "› " + text;
+  else {
+    const w = document.createElement("span");
+    w.className = "who"; w.textContent = kind === "user" ? user.toUpperCase() : "JARVIS";
+    d.append(w, document.createTextNode(text));
+  }
+  log.appendChild(d);
+  while (log.children.length > 80) log.children[1].remove();
+  log.scrollTop = log.scrollHeight;
+}
+function setBar(id, v) {
+  document.getElementById(id).style.width = v + "%";
+  document.getElementById(id + "v").textContent = Math.round(v) + " %";
+}
+
+function connect() {
+  const es = new EventSource("/events");
+  es.onopen = () => document.getElementById("offline").style.display = "none";
+  es.onerror = () => document.getElementById("offline").style.display = "block";
+  es.onmessage = (e) => {
+    const m = JSON.parse(e.data);
+    if (m.type === "state") {
+      document.body.className = m.state;
+      document.getElementById("state").textContent = LABELS[m.state] || m.state;
+      document.getElementById("detail").textContent = m.detail || "";
+    } else if (m.type === "user") add("user", m.text);
+    else if (m.type === "jarvis") add("jarvis", m.text);
+    else if (m.type === "tool") add("tool", m.text);
+    else if (m.type === "config") { user = m.user; document.getElementById("model").textContent = m.model; }
+    else if (m.type === "stats") {
+      setBar("cpu", m.cpu); setBar("ram", m.ram);
+      if (m.battery !== null && m.battery !== undefined) { document.getElementById("batrow").style.display = ""; setBar("bat", m.battery); }
+    }
+  };
+}
+connect();
+
+document.getElementById("f").onsubmit = (e) => {
+  e.preventDefault();
+  const i = document.getElementById("cmd");
+  const text = i.value.trim();
+  if (!text) return;
+  fetch("/command", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }) });
+  i.value = "";
+};
+setInterval(() => document.getElementById("clock").textContent = new Date().toLocaleTimeString("fr-FR"), 1000);
+</script>
+</body>
+</html>

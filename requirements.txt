@@ -1,0 +1,21 @@
+# Cerveau
+anthropic>=0.40
+python-dotenv
+# Oreilles
+SpeechRecognition
+pyaudio
+faster-whisper
+numpy
+# Voix
+edge-tts
+pygame
+pyttsx3
+# Mains et yeux
+psutil
+pyautogui
+mss
+pillow
+# Google (Gmail, Agenda, Tasks)
+google-api-python-client
+google-auth-oauthlib
+google-auth-httplib2

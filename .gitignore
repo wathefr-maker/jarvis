@@ -1,0 +1,8 @@
+# Secrets et données personnelles : restent uniquement sur ton Mac
+.env
+data/*
+!data/.gitkeep
+.venv/
+__pycache__/
+*.pyc
+.DS_Store
