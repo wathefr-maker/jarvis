@@ -53,11 +53,18 @@ def main():
     voice = Voice(cfg, enabled=not args.muet)
     memory = Memory(cfg.data_dir / "memoire.json")
 
+    from jarvis.status import Status
+    status = Status(cfg, emit)
+    if hud:
+        hud.status = status
+        hud.on_refresh = lambda: status.check_all(voice, memory, not args.sans_micro)
+
     ears = None
     if not args.sans_micro:
         from jarvis.ears import Ears
-        ears = Ears(cfg, commands, busy)
+        ears = Ears(cfg, commands, busy, on_state=lambda st, d: status.set("micro", "Micro", st, d))
         ears.start()
+    status.check_all(voice, memory, not args.sans_micro)
 
     def speak(text):
         print(f"\nJARVIS > {text}\n")

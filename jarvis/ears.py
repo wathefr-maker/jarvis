@@ -66,6 +66,7 @@ class Ears(threading.Thread):
             import speech_recognition as sr
         except ImportError:
             print("[oreilles] SpeechRecognition non installé : micro désactivé.")
+            self.on_state("error", "SpeechRecognition non installé")
             return
         r = sr.Recognizer()
         r.pause_threshold = 0.8
@@ -74,11 +75,14 @@ class Ears(threading.Thread):
             mic = sr.Microphone()
         except Exception as e:
             print(f"[oreilles] Aucun micro utilisable ({e}). Utilise le clavier ou le HUD.")
+            self.on_state("error", "Aucun micro détecté")
             return
         with mic as source:
             print("[oreilles] Calibrage du bruit ambiant, silence 1 seconde…")
             r.adjust_for_ambient_noise(source, duration=1)
             print("[oreilles] J'écoute. Dites « Jarvis » suivi de votre demande.")
+            moteur = f"Whisper {self.cfg.whisper_model} (local)" if self._whisper else "Reconnaissance Google (en ligne)"
+            self.on_state("ok", f"À l'écoute · {moteur}")
             while True:
                 if self.busy.is_set():
                     time.sleep(0.1)

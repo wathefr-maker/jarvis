@@ -54,7 +54,26 @@
   .bar { margin: 8px 0; font-size: 11px; letter-spacing: .1em; }
   .bar .track { height: 5px; background: rgba(63,216,255,.12); margin-top: 4px; }
   .bar .fill { height: 100%; background: var(--c); width: 0; transition: width .8s; box-shadow: 0 0 8px var(--c); }
-  #log { right: 30px; top: 80px; bottom: 110px; width: min(430px, 36vw); overflow-y: auto; scrollbar-width: thin; }
+  #right { right: 30px; top: 80px; bottom: 110px; width: min(430px, 36vw); display: flex; flex-direction: column; }
+  .tabs { display: flex; gap: 22px; margin-bottom: 12px; border-bottom: 1px solid rgba(63,216,255,.2); }
+  .tab { font-size: 10px; letter-spacing: .35em; font-weight: 600; color: var(--c); opacity: .45; cursor: pointer;
+    padding-bottom: 8px; border-bottom: 2px solid transparent; margin-bottom: -1px; user-select: none; }
+  .tab.on { opacity: 1; border-bottom-color: var(--c); }
+  .tab .badge { display: inline-block; min-width: 16px; padding: 1px 5px; margin-left: 4px; border-radius: 8px; font-size: 9px;
+    letter-spacing: 0; background: var(--warn); color: #000; text-align: center; }
+  .view { flex: 1; overflow-y: auto; scrollbar-width: thin; display: none; }
+  .view.on { display: block; }
+  .conn { display: flex; align-items: flex-start; gap: 12px; padding: 11px 4px; border-bottom: 1px solid rgba(63,216,255,.1); animation: fade .4s; }
+  .dot { width: 9px; height: 9px; border-radius: 50%; margin-top: 4px; flex: none; }
+  .dot.ok { background: #4dff9a; box-shadow: 0 0 8px #4dff9a; }
+  .dot.warn { background: var(--warn); box-shadow: 0 0 8px var(--warn); }
+  .dot.error { background: #ff5b5b; box-shadow: 0 0 8px #ff5b5b; animation: blink 1.2s infinite; }
+  .dot.off { background: #46606b; }
+  @keyframes blink { 50% { opacity: .3; } }
+  .conn .name { font-size: 13px; letter-spacing: .08em; }
+  .conn .det { font-size: 11px; opacity: .6; margin-top: 2px; word-break: break-word; }
+  .conn .st { margin-left: auto; font-size: 9px; letter-spacing: .25em; opacity: .7; text-transform: uppercase; white-space: nowrap; margin-top: 3px; }
+  #refresh { margin-top: 12px; width: 100%; border: 1px solid rgba(63,216,255,.4); padding: 9px; background: transparent; }
   .msg { margin-bottom: 12px; font-size: 14px; line-height: 1.45; animation: fade .4s; }
   .msg .who { font-size: 10px; letter-spacing: .3em; opacity: .65; display: block; margin-bottom: 2px; }
   .msg.user .who { color: #9fb8c4; }
@@ -69,7 +88,7 @@
     letter-spacing: .3em; cursor: pointer; font-size: 11px; }
   button:hover { background: rgba(63,216,255,.12); }
   #offline { position: fixed; top: 50px; left: 50%; transform: translateX(-50%); color: var(--warn); font-size: 12px; letter-spacing: .2em; display: none; }
-  @media (max-width: 900px) { #stats { display: none; } #log { width: 90vw; right: 5vw; top: auto; height: 22vh; bottom: 100px; }
+  @media (max-width: 900px) { #stats { display: none; } #right { width: 90vw; right: 5vw; top: auto; height: 22vh; bottom: 100px; }
     .core-wrap { transform: translate(-50%, -60%) scale(.7); } }
 </style>
 </head>
@@ -94,7 +113,17 @@
   <div class="bar" id="batrow" style="display:none">BATTERIE <span id="batv">--</span><div class="track"><div class="fill" id="bat"></div></div></div>
 </div>
 
-<div class="panel" id="log"><h3>JOURNAL</h3></div>
+<div class="panel" id="right">
+  <div class="tabs">
+    <span class="tab on" data-v="log">JOURNAL</span>
+    <span class="tab" data-v="conns">CONNEXIONS <span class="badge" id="badge" style="display:none"></span></span>
+  </div>
+  <div class="view on" id="log"></div>
+  <div class="view" id="conns">
+    <div id="connlist"></div>
+    <button id="refresh">REVÉRIFIER</button>
+  </div>
+</div>
 
 <form id="f" autocomplete="off">
   <input id="cmd" placeholder="Parlez, ou tapez une commande…" autofocus>
@@ -116,7 +145,7 @@ function add(kind, text) {
     d.append(w, document.createTextNode(text));
   }
   log.appendChild(d);
-  while (log.children.length > 80) log.children[1].remove();
+  while (log.children.length > 80) log.children[0].remove();
   log.scrollTop = log.scrollHeight;
 }
 function setBar(id, v) {
@@ -137,6 +166,7 @@ function connect() {
     } else if (m.type === "user") add("user", m.text);
     else if (m.type === "jarvis") add("jarvis", m.text);
     else if (m.type === "tool") add("tool", m.text);
+    else if (m.type === "connection") setConn(m);
     else if (m.type === "config") { user = m.user; document.getElementById("model").textContent = m.model; }
     else if (m.type === "stats") {
       setBar("cpu", m.cpu); setBar("ram", m.ram);
@@ -144,6 +174,32 @@ function connect() {
     }
   };
 }
+const conns = {};
+const ST = { ok: "Connecté", warn: "À configurer", error: "Erreur", off: "Inactif" };
+function setConn(m) {
+  conns[m.key] = m;
+  const list = document.getElementById("connlist");
+  list.innerHTML = "";
+  Object.values(conns).sort((a, b) => a.order - b.order).forEach(c => {
+    const row = document.createElement("div"); row.className = "conn";
+    const dot = document.createElement("span"); dot.className = "dot " + c.status;
+    const txt = document.createElement("div");
+    const n = document.createElement("div"); n.className = "name"; n.textContent = c.label;
+    const d = document.createElement("div"); d.className = "det"; d.textContent = c.detail || "";
+    txt.append(n, d);
+    const st = document.createElement("span"); st.className = "st"; st.textContent = ST[c.status] || c.status;
+    row.append(dot, txt, st); list.appendChild(row);
+  });
+  const bad = Object.values(conns).filter(c => c.status === "error" || c.status === "warn").length;
+  const b = document.getElementById("badge");
+  b.style.display = bad ? "" : "none"; b.textContent = bad;
+  b.style.background = Object.values(conns).some(c => c.status === "error") ? "#ff5b5b" : "";
+}
+document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
+  document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
+  document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === t.dataset.v));
+});
+document.getElementById("refresh").onclick = () => fetch("/refresh", { method: "POST" });
 connect();
 
 document.getElementById("f").onsubmit = (e) => {

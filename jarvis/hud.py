@@ -17,6 +17,8 @@ class HUD:
         self.clients = []
         self.lock = threading.Lock()
         self.last_state = {"type": "state", "state": "idle", "detail": ""}
+        self.status = None  # objet Status, branché par jarvis_main
+        self.on_refresh = None
 
     def emit(self, type_, **data):
         msg = {"type": type_, **data}
@@ -61,6 +63,9 @@ class HUD:
                     q = queue.Queue()
                     q.put(json.dumps(hud.last_state, ensure_ascii=False))
                     q.put(json.dumps({"type": "config", "user": hud.cfg.user_name, "model": hud.cfg.model}, ensure_ascii=False))
+                    if hud.status:
+                        for item in hud.status.snapshot():
+                            q.put(json.dumps({"type": "connection", **item}, ensure_ascii=False))
                     with hud.lock:
                         hud.clients.append(q)
                     try:
@@ -80,6 +85,12 @@ class HUD:
                     self.send_error(404)
 
             def do_POST(self):
+                if self.path == "/refresh":
+                    if hud.on_refresh:
+                        hud.on_refresh()
+                    self.send_response(204)
+                    self.end_headers()
+                    return
                 if self.path != "/command":
                     return self.send_error(404)
                 n = int(self.headers.get("Content-Length", 0))
