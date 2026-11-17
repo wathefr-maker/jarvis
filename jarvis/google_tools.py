@@ -30,6 +30,21 @@ def available(cfg):
     return credentials_path(cfg).exists()
 
 
+def adopt_downloaded(cfg):
+    """Si le fichier client_secret_*.json est dans Téléchargements, on le range tout seul dans data/."""
+    if available(cfg):
+        return True
+    import shutil
+    from pathlib import Path
+
+    found = sorted(Path.home().joinpath("Downloads").glob("client_secret*.json"), key=lambda p: p.stat().st_mtime)
+    if not found:
+        return False
+    shutil.copy(found[-1], credentials_path(cfg))
+    print(f"[google] Fichier d'accès trouvé dans Téléchargements et installé : {found[-1].name}")
+    return True
+
+
 def get_creds(cfg, interactive=False):
     from google.auth.transport.requests import Request
     from google.oauth2.credentials import Credentials

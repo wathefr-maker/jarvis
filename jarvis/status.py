@@ -15,6 +15,7 @@ class Status:
         self.emit = emit
         self.items = {}
         self.lock = threading.Lock()
+        self._google_login = threading.Lock()
 
     def set(self, key, label, status, detail=""):
         with self.lock:
@@ -69,20 +70,35 @@ class Status:
     def _check_google(self):
         from . import google_tools as G
         labels = {"gmail": "Gmail", "agenda": "Google Agenda", "tasks": "Google Tasks"}
-        if not G.available(self.cfg):
+        if not G.adopt_downloaded(self.cfg):
             for k, l in labels.items():
-                self.set(k, l, "warn", "Non configuré : credentials.json manquant")
+                self.set(k, l, "warn", "Non configuré : crée l'accès sur console.cloud.google.com")
             return
         if not G.token_path(self.cfg).exists():
-            for k, l in labels.items():
-                self.set(k, l, "warn", "À connecter : lance connecter_google.py")
-            return
+            if self._google_login.locked():
+                return  # une fenêtre d'autorisation est déjà ouverte
+            with self._google_login:
+                for k, l in labels.items():
+                    self.set(k, l, "warn", "Autorise JARVIS dans la page Google qui vient de s'ouvrir")
+                try:
+                    G.get_creds(self.cfg, interactive=True)
+                    if hasattr(self.cfg, "_tools_cache"):
+                        del self.cfg._tools_cache  # active les outils Google sans redémarrer
+                except Exception as e:
+                    for k, l in labels.items():
+                        self.set(k, l, "error", f"Autorisation non terminée : {str(e)[:70]}")
+                    return
         try:
             from googleapiclient.discovery import build
             creds = G.get_creds(self.cfg)
         except Exception as e:
+            if "expir" in str(e).lower() or "absente" in str(e):
+                G.token_path(self.cfg).unlink(missing_ok=True)  # on repartira sur une nouvelle autorisation
+                msg = "Connexion expirée : clique sur REVÉRIFIER pour te reconnecter"
+            else:
+                msg = str(e)[:80]
             for k, l in labels.items():
-                self.set(k, l, "error", "Connexion expirée : relance connecter_google.py" if "expir" in str(e).lower() or "absente" in str(e) else str(e)[:80])
+                self.set(k, l, "error", msg)
             return
         checks = {
             "gmail": lambda: build("gmail", "v1", credentials=creds, cache_discovery=False).users().getProfile(userId="me").execute()["emailAddress"],
