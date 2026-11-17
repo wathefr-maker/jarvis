@@ -218,16 +218,90 @@ def _body_text(payload):
     return unescape(re.sub(r"<[^>]+>", " ", text))
 
 
-def gmail_chercher(ctx, requete="is:unread in:inbox", max_resultats=10):
+# ---- Tri humain / automatique
+_AUTO_SENDER = re.compile(
+    r"(no[-_.]?reply|do[-_.]?not[-_.]?reply|ne[-_.]?pas[-_.]?repondre|noreply|notifications?|notify|alerts?|mailer|"
+    r"newsletter|news@|info@|hello@|bonjour@|marketing|promo|offres?@|deals?@|support@|service[-_.]?client|"
+    r"billing|factur|invoice|receipts?|orders?@|commandes?@|shipping|livraison|tracking|bounce|daemon|postmaster|"
+    r"automated|accounts?@|security@|team@|equipe@|updates?@|digest|calendar-notification)", re.I)
+_CATEGORIES_AUTO = {"CATEGORY_PROMOTIONS": "pub", "CATEGORY_SOCIAL": "réseau social",
+                    "CATEGORY_UPDATES": "notification", "CATEGORY_FORUMS": "liste de diffusion"}
+_KIND_WORDS = [
+    ("commande / livraison", r"commande|order|livraison|exp[ée]di|shipp|colis|parcel|tracking|suivi de|delivered|livr[ée]"),
+    ("facture / paiement", r"facture|invoice|re[çc]u|receipt|paiement|payment|pr[ée]l[èe]vement|virement|transaction"),
+    ("sécurité / compte", r"code de v[ée]rification|verification code|connexion|sign[- ]?in|mot de passe|password|s[ée]curit"),
+    ("pub / newsletter", r"promo|soldes|offre|% |r[ée]duction|newsletter|black friday|nouveaut"),
+]
+
+
+def _classify(msg):
+    """Renvoie (est_automatique, type) à partir des en-têtes et des catégories Gmail."""
+    labels = set(msg.get("labelIds", []))
+    frm = _header(msg, "From")
+    subj = _header(msg, "Subject")
+    auto_reasons = []
+    if _header(msg, "List-Unsubscribe") or _header(msg, "List-Id"):
+        auto_reasons.append("liste")
+    if _header(msg, "Precedence").lower() in ("bulk", "list", "junk"):
+        auto_reasons.append("masse")
+    if _header(msg, "Auto-Submitted").lower() not in ("", "no"):
+        auto_reasons.append("auto")
+    if _AUTO_SENDER.search(frm):
+        auto_reasons.append("expéditeur")
+    cat = next((_CATEGORIES_AUTO[c] for c in labels if c in _CATEGORIES_AUTO), None)
+    if cat:
+        auto_reasons.append(cat)
+    kind = next((k for k, rx in _KIND_WORDS if re.search(rx, subj, re.I)), cat or "notification")
+    # Un mail perso répondant à un fil (« Re: ») sans en-tête de masse reste humain.
+    if auto_reasons == ["expéditeur"] and re.match(r"\s*(re|tr|fwd?)\s*:", subj, re.I):
+        return False, ""
+    return bool(auto_reasons), kind
+
+
+def _sender(frm):
+    m = re.match(r'\s*"?([^"<]*)"?\s*<([^>]+)>', frm)
+    name, mail = (m.group(1).strip(), m.group(2)) if m else ("", frm.strip())
+    domain = mail.split("@")[-1].lower()
+    perso = domain in ("gmail.com", "hotmail.com", "hotmail.fr", "outlook.com", "outlook.fr", "yahoo.fr", "yahoo.com",
+                       "icloud.com", "live.fr", "orange.fr", "free.fr", "sfr.fr", "laposte.net", "wanadoo.fr")
+    societe = "" if perso else domain.rsplit(".", 1)[0].split(".")[-1].capitalize()
+    return name or mail, mail, societe
+
+
+def gmail_chercher(ctx, requete="is:unread in:inbox", max_resultats=15, filtre="humains"):
+    """filtre : 'humains' (par défaut), 'automatiques' ou 'tous'."""
     g = svc(ctx, "gmail").users()
-    ids = g.messages().list(userId="me", q=requete, maxResults=min(int(max_resultats), 25)).execute().get("messages", [])
+    n = min(int(max_resultats), 25)
+    ids = g.messages().list(userId="me", q=requete, maxResults=40 if filtre == "humains" else n).execute().get("messages", [])
     if not ids:
         return "Aucun e-mail ne correspond."
-    out = []
+    humains, autos = [], []
     for m in ids:
-        msg = g.messages().get(userId="me", id=m["id"], format="metadata", metadataHeaders=["From", "Subject", "Date"]).execute()
-        out.append(f"- De : {_header(msg, 'From')} | Objet : {_header(msg, 'Subject')} | {_header(msg, 'Date')[:22]}\n"
-                   f"  Aperçu : {unescape(msg.get('snippet', ''))[:160]}  [id={m['id']}]")
+        msg = g.messages().get(userId="me", id=m["id"], format="metadata", metadataHeaders=[
+            "From", "Subject", "Date", "List-Unsubscribe", "List-Id", "Precedence", "Auto-Submitted"]).execute()
+        auto, kind = _classify(msg)
+        (autos if auto else humains).append((msg, kind))
+    out = []
+    if filtre in ("humains", "tous"):
+        out.append(f"=== {len(humains)} e-mail(s) écrits par des personnes ===")
+        for i, (msg, _) in enumerate(humains[:n], 1):
+            name, mail, soc = _sender(_header(msg, "From"))
+            unread = " [NON LU]" if "UNREAD" in msg.get("labelIds", []) else ""
+            out.append(f"{i}. {name}{' (' + soc + ')' if soc else ''} <{mail}>{unread}\n"
+                       f"   Objet : {_header(msg, 'Subject') or '(sans objet)'}\n   Reçu : {_header(msg, 'Date')[:22]}\n"
+                       f"   Extrait : {unescape(msg.get('snippet', ''))[:300]}\n   [id={msg['id']}]")
+    if filtre == "automatiques" or filtre == "tous":
+        out.append(f"=== {len(autos)} e-mail(s) automatiques ===")
+        for i, (msg, kind) in enumerate(autos[:n], 1):
+            name, mail, soc = _sender(_header(msg, "From"))
+            out.append(f"{i}. [{kind}] {name} — {_header(msg, 'Subject')}  [id={msg['id']}]")
+    elif autos:
+        kinds = {}
+        for _, k in autos:
+            kinds[k] = kinds.get(k, 0) + 1
+        detail = ", ".join(f"{v} {k}" for k, v in sorted(kinds.items(), key=lambda x: -x[1]))
+        out.append(f"(+ {len(autos)} e-mail(s) automatiques mis de côté : {detail}. "
+                   "Utilise filtre='automatiques' si l'utilisateur veut les voir.)")
     return "\n".join(out)
 
 
@@ -293,9 +367,11 @@ def tools(_t):
            {"titre": S, "notes": S, "echeance": S, "liste_id": S}, ["titre"]),
         _t(taches_terminer, "Coche une tâche comme terminée (id et liste_id obtenus via taches_lister).",
            {"task_id": S, "liste_id": S}, ["task_id"]),
-        _t(gmail_chercher, "Cherche des e-mails Gmail avec la syntaxe de recherche Gmail (ex : 'is:unread in:inbox', "
-           "'from:dupont newer_than:7d', 'subject:facture'). Renvoie expéditeur, objet, aperçu et id.",
-           {"requete": S, "max_resultats": I}),
+        _t(gmail_chercher, "Cherche des e-mails Gmail (syntaxe Gmail : 'is:unread in:inbox', 'from:dupont newer_than:7d', "
+           "'subject:facture'…). Par défaut (filtre='humains') ne renvoie QUE les mails écrits par de vraies personnes et "
+           "compte à part les mails automatiques (commandes, livraisons, factures, notifications, pubs). "
+           "filtre='automatiques' pour voir ces derniers, 'tous' pour tout.",
+           {"requete": S, "max_resultats": I, "filtre": {"type": "string", "enum": ["humains", "automatiques", "tous"]}}),
         _t(gmail_lire, "Lit le contenu complet d'un e-mail (id obtenu via gmail_chercher) et le marque comme lu.",
            {"message_id": S, "marquer_lu": B}, ["message_id"]),
         _t(gmail_brouillon, "Prépare un e-mail en brouillon dans Gmail sans l'envoyer. repondre_a = id du mail auquel on répond (optionnel).",

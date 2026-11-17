@@ -202,6 +202,12 @@ def type_text(ctx, text):
         return f"Impossible de taper : {e}"
 
 
+def afficher_ecran(ctx, titre, elements):
+    """Affiche une fiche claire dans le journal du HUD (non lue à voix haute)."""
+    ctx.emit("card", title=titre, items=elements)
+    return "Affiché à l'écran."
+
+
 # ----------------------------------------------------------------- maison connectée (Home Assistant)
 def _ha(ctx, method, path, body=None):
     req = urllib.request.Request(
@@ -254,6 +260,10 @@ TOOLS = [
     _t(media_control, "Contrôle la musique et le son.",
        {"action": {"type": "string", "enum": ["lecture_pause", "suivant", "precedent", "volume_plus", "volume_moins", "muet"]}}, ["action"]),
     _t(type_text, "Tape du texte au clavier dans la fenêtre active (dictée).", {"text": S}, ["text"]),
+    _t(afficher_ecran, "Affiche une fiche lisible dans le HUD, sans la lire à voix haute. À utiliser pour toute liste "
+       "(e-mails, rendez-vous, tâches, résultats) : chaque élément a un titre, un sous-titre, un texte et un badge optionnels.",
+       {"titre": S, "elements": {"type": "array", "items": {"type": "object", "properties": {
+           "titre": S, "sous_titre": S, "texte": S, "badge": S}, "required": ["titre"]}}}, ["titre", "elements"]),
 ]
 HOME_TOOLS = [
     _t(home_list_devices, "Liste les appareils de la maison connectée et leur état. domain optionnel : light, switch, climate, cover, media_player…",

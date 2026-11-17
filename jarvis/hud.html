@@ -81,6 +81,16 @@
   .msg.user .who { color: #9fb8c4; }
   .msg.jarvis .who { color: var(--c); }
   .msg.tool { font-size: 11px; opacity: .6; font-family: Consolas, monospace; }
+  .card { margin: 4px 0 16px; border: 1px solid rgba(63,216,255,.3); background: rgba(63,216,255,.04); animation: fade .4s; }
+  .card .ct { font-size: 10px; letter-spacing: .3em; color: var(--c); padding: 9px 12px; border-bottom: 1px solid rgba(63,216,255,.2); text-transform: uppercase; }
+  .card .it { padding: 10px 12px; border-bottom: 1px solid rgba(63,216,255,.1); }
+  .card .it:last-child { border-bottom: none; }
+  .card .t { font-size: 14px; font-weight: 600; display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
+  .card .st { font-size: 12px; opacity: .75; margin-top: 2px; }
+  .card .tx { font-size: 13px; opacity: .9; margin-top: 5px; line-height: 1.45; }
+  .card .b { font-size: 9px; letter-spacing: .15em; padding: 2px 6px; border: 1px solid var(--c); color: var(--c); white-space: nowrap; font-weight: 500; }
+  .card .b.urgent { border-color: #ff5b5b; color: #ff5b5b; }
+  .card .b.repondre { border-color: var(--warn); color: var(--warn); }
   @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
   form { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); width: min(620px, 80vw); display: flex; }
   input { flex: 1; background: rgba(3,20,28,.8); border: 1px solid rgba(63,216,255,.45); color: var(--txt);
@@ -151,6 +161,29 @@ function add(kind, text) {
   while (log.children.length > 80) log.children[0].remove();
   log.scrollTop = log.scrollHeight;
 }
+function addCard(m) {
+  const c = document.createElement("div"); c.className = "card";
+  const h = document.createElement("div"); h.className = "ct"; h.textContent = m.title || ""; c.appendChild(h);
+  (m.items || []).forEach(i => {
+    const it = document.createElement("div"); it.className = "it";
+    const t = document.createElement("div"); t.className = "t";
+    const tt = document.createElement("span"); tt.textContent = i.titre || ""; t.appendChild(tt);
+    if (i.badge) {
+      const b = document.createElement("span"); b.textContent = i.badge;
+      const k = i.badge.toLowerCase();
+      b.className = "b" + (k.includes("urgent") ? " urgent" : k.includes("pondre") ? " repondre" : "");
+      t.appendChild(b);
+    }
+    it.appendChild(t);
+    if (i.sous_titre) { const st = document.createElement("div"); st.className = "st"; st.textContent = i.sous_titre; it.appendChild(st); }
+    if (i.texte) { const tx = document.createElement("div"); tx.className = "tx"; tx.textContent = i.texte; it.appendChild(tx); }
+    c.appendChild(it);
+  });
+  log.appendChild(c);
+  while (log.children.length > 80) log.children[0].remove();
+  log.scrollTop = log.scrollHeight;
+  document.querySelector('.tab[data-v="log"]').click();
+}
 function setBar(id, v) {
   document.getElementById(id).style.width = v + "%";
   document.getElementById(id + "v").textContent = Math.round(v) + " %";
@@ -170,6 +203,7 @@ function connect() {
     else if (m.type === "jarvis") add("jarvis", m.text);
     else if (m.type === "tool") add("tool", m.text);
     else if (m.type === "connection") setConn(m);
+    else if (m.type === "card") addCard(m);
     else if (m.type === "config") { user = m.user; document.getElementById("model").textContent = m.model; }
     else if (m.type === "stats") {
       setBar("cpu", m.cpu); setBar("ram", m.ram);
