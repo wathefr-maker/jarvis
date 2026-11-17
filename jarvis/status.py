@@ -75,26 +75,16 @@ class Status:
                 self.set(k, l, "warn", "Non configuré : crée l'accès sur console.cloud.google.com")
             return
         if not G.token_path(self.cfg).exists():
-            if self._google_login.locked():
-                return  # une fenêtre d'autorisation est déjà ouverte
-            with self._google_login:
-                for k, l in labels.items():
-                    self.set(k, l, "warn", "Autorise JARVIS dans la page Google qui vient de s'ouvrir")
-                try:
-                    G.get_creds(self.cfg, interactive=True)
-                    if hasattr(self.cfg, "_tools_cache"):
-                        del self.cfg._tools_cache  # active les outils Google sans redémarrer
-                except Exception as e:
-                    for k, l in labels.items():
-                        self.set(k, l, "error", f"Autorisation non terminée : {str(e)[:70]}")
-                    return
+            for k, l in labels.items():
+                self.set(k, l, "warn", "Clique sur CONNECTER GOOGLE ci-dessous")
+            return
         try:
             from googleapiclient.discovery import build
             creds = G.get_creds(self.cfg)
         except Exception as e:
             if "expir" in str(e).lower() or "absente" in str(e):
                 G.token_path(self.cfg).unlink(missing_ok=True)  # on repartira sur une nouvelle autorisation
-                msg = "Connexion expirée : clique sur REVÉRIFIER pour te reconnecter"
+                msg = "Connexion expirée : clique sur CONNECTER GOOGLE"
             else:
                 msg = str(e)[:80]
             for k, l in labels.items():

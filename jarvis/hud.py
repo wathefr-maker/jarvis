@@ -81,8 +81,48 @@ class HUD:
                         with hud.lock:
                             if q in hud.clients:
                                 hud.clients.remove(q)
+                elif self.path.startswith("/google/connect"):
+                    from . import google_tools as G
+                    try:
+                        G.adopt_downloaded(hud.cfg)
+                        if not G.available(hud.cfg):
+                            raise RuntimeError("Fichier d'accès Google (client_secret….json) introuvable dans Téléchargements.")
+                        url = G.start_web_flow(hud.cfg, f"http://localhost:{hud.cfg.hud_port}/oauth2callback")
+                        self.send_response(302)
+                        self.send_header("Location", url)
+                        self.end_headers()
+                    except Exception as e:
+                        self._page("Connexion Google impossible", str(e), ok=False)
+                elif self.path.startswith("/oauth2callback"):
+                    from . import google_tools as G
+                    try:
+                        if "error=" in self.path:
+                            raise RuntimeError("Autorisation refusée sur la page Google.")
+                        G.finish_web_flow(hud.cfg, f"http://localhost:{hud.cfg.hud_port}{self.path}")
+                        if hasattr(hud.cfg, "_tools_cache"):
+                            del hud.cfg._tools_cache  # outils Google actifs tout de suite
+                        if hud.on_refresh:
+                            hud.on_refresh()
+                        self._page("Google est connecté ✅", "Gmail, Google Agenda et Google Tasks sont prêts. Tu peux fermer cet onglet.", ok=True)
+                    except Exception as e:
+                        self._page("La connexion Google a échoué", str(e), ok=False)
                 else:
                     self.send_error(404)
+
+            def _page(self, title, text, ok=True):
+                import html as _h
+                color = "#4dff9a" if ok else "#ff5b5b"
+                body = (f"<!DOCTYPE html><meta charset='utf-8'><title>JARVIS</title>"
+                        f"<body style='background:#02070b;color:#cdeffc;font-family:Segoe UI,Arial;display:flex;align-items:center;"
+                        f"justify-content:center;height:100vh;margin:0'><div style='text-align:center;max-width:560px'>"
+                        f"<h1 style='color:{color};letter-spacing:.08em;font-weight:500'>{_h.escape(title)}</h1>"
+                        f"<p style='opacity:.8;line-height:1.5'>{_h.escape(text)}</p>"
+                        f"<p><a href='/' style='color:#3fd8ff'>Retour au HUD</a></p></div></body>").encode()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
 
             def do_POST(self):
                 if self.path == "/refresh":

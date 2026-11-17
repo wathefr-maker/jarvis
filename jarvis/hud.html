@@ -73,6 +73,8 @@
   .conn .name { font-size: 13px; letter-spacing: .08em; }
   .conn .det { font-size: 11px; opacity: .6; margin-top: 2px; word-break: break-word; }
   .conn .st { margin-left: auto; font-size: 9px; letter-spacing: .25em; opacity: .7; text-transform: uppercase; white-space: nowrap; margin-top: 3px; }
+  #gconnect { margin-top: 12px; width: 100%; padding: 11px; border: 1px solid var(--warn); color: var(--warn); background: rgba(255,179,71,.08); }
+  #gconnect:hover { background: rgba(255,179,71,.18); }
   #refresh { margin-top: 12px; width: 100%; border: 1px solid rgba(63,216,255,.4); padding: 9px; background: transparent; }
   .msg { margin-bottom: 12px; font-size: 14px; line-height: 1.45; animation: fade .4s; }
   .msg .who { font-size: 10px; letter-spacing: .3em; opacity: .65; display: block; margin-bottom: 2px; }
@@ -121,6 +123,7 @@
   <div class="view on" id="log"></div>
   <div class="view" id="conns">
     <div id="connlist"></div>
+    <button id="gconnect" style="display:none">CONNECTER GOOGLE</button>
     <button id="refresh">REVÉRIFIER</button>
   </div>
 </div>
@@ -190,6 +193,8 @@ function setConn(m) {
     const st = document.createElement("span"); st.className = "st"; st.textContent = ST[c.status] || c.status;
     row.append(dot, txt, st); list.appendChild(row);
   });
+  const g = ["gmail", "agenda", "tasks"].map(k => conns[k]).filter(Boolean);
+  document.getElementById("gconnect").style.display = g.some(c => c.status !== "ok") ? "" : "none";
   const bad = Object.values(conns).filter(c => c.status === "error" || c.status === "warn").length;
   const b = document.getElementById("badge");
   b.style.display = bad ? "" : "none"; b.textContent = bad;
@@ -199,6 +204,7 @@ document.querySelectorAll(".tab").forEach(t => t.onclick = () => {
   document.querySelectorAll(".tab").forEach(x => x.classList.toggle("on", x === t));
   document.querySelectorAll(".view").forEach(v => v.classList.toggle("on", v.id === t.dataset.v));
 });
+document.getElementById("gconnect").onclick = () => window.open("/google/connect", "_blank");
 document.getElementById("refresh").onclick = () => fetch("/refresh", { method: "POST" });
 connect();
 

@@ -71,6 +71,33 @@ def get_creds(cfg, interactive=False):
     return creds
 
 
+# ---- Connexion depuis le HUD (bouton « CONNECTER GOOGLE ») : plus fiable que la fenêtre automatique
+_web_flow = {}
+
+
+def start_web_flow(cfg, redirect_uri):
+    import os
+    os.environ.setdefault("OAUTHLIB_INSECURE_TRANSPORT", "1")  # retour sur http://localhost : autorisé
+    os.environ.setdefault("OAUTHLIB_RELAX_TOKEN_SCOPE", "1")
+    from google_auth_oauthlib.flow import Flow
+
+    flow = Flow.from_client_secrets_file(str(credentials_path(cfg)), scopes=SCOPES, redirect_uri=redirect_uri)
+    url, state = flow.authorization_url(access_type="offline", prompt="consent", include_granted_scopes="true")
+    _web_flow["flow"] = flow
+    return url
+
+
+def finish_web_flow(cfg, callback_url):
+    flow = _web_flow.get("flow")
+    if flow is None:
+        raise RuntimeError("Session d'autorisation introuvable : reclique sur CONNECTER GOOGLE.")
+    flow.fetch_token(authorization_response=callback_url)
+    token_path(cfg).write_text(flow.credentials.to_json())
+    _web_flow.clear()
+    _services.clear()
+    return flow.credentials
+
+
 def svc(ctx, name):
     if name not in _services:
         from googleapiclient.discovery import build
